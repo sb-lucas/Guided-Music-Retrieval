@@ -1,0 +1,6 @@
+*.pdf
+essentia_model_weights/
+data/
+dimsim/accuracies.csv
+dimsim/clean_dimsim_audios/
+dimsim/metadata/

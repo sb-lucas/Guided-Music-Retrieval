@@ -15,7 +15,7 @@ import soundfile as sf
 import multiprocessing as mp
 from multiprocessing import Pool
 
-WEIGHTS_PATH = 'path/to/essentia/weights' 
+WEIGHTS_PATH = '/home/ldsbrandao/exp/diego/diego/final/essentia_model_weights'
 
 #--------------------------------------DEFINING ALL MODELS---------------------------------------#
 class MERT():
@@ -294,7 +294,7 @@ class DiscogsEffnet():
 #--------------------------------------EXPERIMENT CODE---------------------------------------#
 
 def load_audio(song_id, start_samples, clip_length_samples, sr):
-    file_path = f'path/to/dimsim/audios/{song_id}.mp3'
+    file_path = f'/home/ldsbrandao/exp/diego/diego/final/dimsim/clean_dimsim_audios/{song_id}.mp3'
     audio, _ = librosa.load(file_path, sr=sr, offset=start_samples/sr, duration=clip_length_samples/sr)
     return audio
 
@@ -322,7 +322,7 @@ def solve_triplet(model, sr, anchor, song1, song2):
 
 
 def evaluate_model(ModelClass):
-    df = pd.read_csv('path/to/dimsim/metadata/clean-dim-sim.csv')
+    df = pd.read_csv('/home/ldsbrandao/exp/diego/diego/final/dimsim/metadata/clean-dim-sim.csv')
 
     model_name = ModelClass.__name__
     with open('log.txt', 'a') as f:
@@ -359,15 +359,18 @@ def evaluate_model(ModelClass):
     return (model_name, acc)
 
 def main():
-    model_classes = [VGGISH, MAEST, CLAP, MusiCNN, DiscogsEffnet, MERT, OpenL3]
+    #model_classes = [VGGISH, MAEST, CLAP, MusiCNN, DiscogsEffnet, MERT, OpenL3]
 
-    NUM_WORKERS = 7
+    #NUM_WORKERS = 7
 
-    with Pool(processes=NUM_WORKERS) as pool:
-        results = pool.map(evaluate_model, model_classes)
+    # with Pool(processes=NUM_WORKERS) as pool:
+    #     results = pool.map(evaluate_model, model_classes)
 
-    accs_df = pd.DataFrame(results, columns=['Model', 'Accuracy'])
-    accs_df.to_csv('save/path', index=False)
+    # accs_df = pd.DataFrame(results, columns=['Model', 'Accuracy'])
+    # accs_df.to_csv('/home/ldsbrandao/exp/diego/diego/final/dimsim/accuracies.csv', index=False)
+    
+    results = evaluate_model(CLAP)
+    print(results)
 
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
