@@ -1,6 +1,6 @@
 # Guided Music Retrieval
 
-This is the official code for Guided Music Retrieval: Music Search with Multimodal Queries.
+This is the official code for the paper Guided Music Retrieval: Music Search with Multimodal Queries.
 
 ## Repository Contents
 
