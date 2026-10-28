@@ -1,6 +1,15 @@
 *.pdf
 essentia_model_weights/
 data/
+data_old/
 dimsim/accuracies.csv
 dimsim/clean_dimsim_audios/
 dimsim/metadata/
+train/grid_logs/
+train/runs/
+train/results/
+.env
+*.out
+*.txt
+__pycache__/
+cache/

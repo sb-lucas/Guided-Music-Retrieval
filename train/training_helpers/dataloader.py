@@ -10,69 +10,45 @@ import librosa
 import sys, os
 import random
 import math
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../feature_extractors')))
-from clap import HuggingFaceClap
-
 import pickle
+
+from utils.caching import cache_items
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../feature_extraction')))
+from extractors.clap import CLAP
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+AUDIOS_FOLDER = os.getenv("AUDIOS_FOLDER")
+EMBEDDINGS_GLOBAL_FOLDER = os.getenv("EMBEDDINGS_GLOBAL_FOLDER")
+EMBEDDINGS_LOCAL_FOLDER = os.getenv("EMBEDDINGS_LOCAL_FOLDER")
 
 class TripletDataset(Dataset):
     def __init__(self, triplets_path, return_local_tokens, split='train', dataset='controlled'):
-
-        clap_model = HuggingFaceClap()
-
-        self.local_audio_tokens_folder = "path/to/clap_local"
-        self.global_audio_tokens_folder = "path/to/clap_global"
+        self.local_audio_tokens_folder = EMBEDDINGS_LOCAL_FOLDER
+        self.global_audio_tokens_folder = EMBEDDINGS_GLOBAL_FOLDER
+        self.audios_folder = AUDIOS_FOLDER
         self.triplets_df = pd.read_csv(triplets_path)
+
+        if split == 'val':
+            #shuffle it once to ungroup the data, but keep it deterministic for reproducibility
+            self.triplets_df = self.triplets_df.sample(frac=1, random_state=0).reset_index(drop=True)
         
         self.return_local_tokens = return_local_tokens
 
-        self.all_songs = pd.concat([self.triplets_df["reference_song"], self.triplets_df["target_song"]]).unique()
-
         #pre loading all audio embeddings
-        self.audio_cache = {}
-        if os.path.exists(f"cache/audio_cache_{dataset}_{split}.pt"):
-            print("Loading pre-computed audio cache...")
-            self.audio_cache = torch.load(f"cache/audio_cache_{dataset}_{split}.pt", map_location="cpu")
-        else:
-            for i, song in enumerate(self.all_songs):
-                print(f"Pre-loading audio embeddings: {i+1}/{len(self.all_songs)}. song = {song}: ", end='\r')
-                song_id = song.split('.')[0]
-                local_path = os.path.join(self.local_audio_tokens_folder, f"{song_id}.npy")
-                global_path = os.path.join(self.global_audio_tokens_folder, f"{song_id}.npy")
-
-                local = torch.from_numpy(np.load(local_path)).float().squeeze()
-                global_ = torch.from_numpy(np.load(global_path)).float().squeeze()
-
-                # normalize once
-                local = F.normalize(local, dim=-1)
-                global_ = F.normalize(global_, dim=-1)
-
-                self.audio_cache[song_id] = (local, global_)
-
-            #save cache
-            torch.save(self.audio_cache, f"cache/audio_cache_{dataset}_{split}.pt")
+        self.all_songs = pd.concat([self.triplets_df["reference_song"], self.triplets_df["target_song"]]).unique()
+        self.audio_cache = cache_items(self.all_songs, dataset, split, self.return_local_tokens, cache_type='audio', purpose='training')
 
         #pre loading all text embeddings
-        self.text_cache = {}
-        if os.path.exists(f"cache/text_cache_{dataset}_{split}.pt"):
-            print("Loading pre-computed text cache...")
-            self.text_cache = torch.load(f"cache/text_cache_{dataset}_{split}.pt", map_location="cpu")
-        else:
-            unique_texts = self.triplets_df['modification_text'].unique()
-            for text in unique_texts:
-                g, l = clap_model.get_text_tokens(text)
-                g = g.detach().cpu()
-                l = l.detach().cpu()
-                
-                l = F.normalize(l.float().squeeze(), dim=-1)
-                g = F.normalize(g.float().squeeze(), dim=-1)
+        self.text_cache = cache_items(self.triplets_df['modification_text'].unique(), dataset, split, self.return_local_tokens, cache_type='text', purpose='training')
 
-                self.text_cache[text] = (g, l)
-            #save cache
-            torch.save(self.text_cache, f"cache/text_cache_{dataset}_{split}.pt")
-
-        del clap_model
-        torch.cuda.empty_cache()  # optional but safe
+        #create query and target ids for the loss
+        query_key = self.triplets_df['reference_song'] + '||' + self.triplets_df['modification']
+        self.query_ids  = pd.factorize(query_key)[0]
+        self.target_ids = pd.factorize(self.triplets_df['target_song'].str.split('.').str[0])[0]
 
         print('TripletDataset initialized:')
 
@@ -82,7 +58,7 @@ class TripletDataset(Dataset):
     def get_audio_len(self):
         sample_row = self.triplets_df.iloc[0]
         sample_song = sample_row['reference_song']
-        sample_song_path = os.path.join("path/to/audios", sample_song)
+        sample_song_path = os.path.join(self.audios_folder, sample_song)
         audio, sr = librosa.load(sample_song_path, sr=None)
 
         return len(audio)/sr #return length in seconds
@@ -96,16 +72,19 @@ class TripletDataset(Dataset):
         reference_song = row['reference_song'].split('.')[0]
         target_song = row['target_song'].split('.')[0]
         
-        ref_local, ref_global = self.audio_cache[reference_song]
-        tar_local, tar_global = self.audio_cache[target_song]
+        ref_global, ref_local = self.audio_cache[reference_song]
+        tar_global, tar_local = self.audio_cache[target_song]
 
         modification_text = row['modification_text']
         mod_global, mod_local = self.text_cache[modification_text]
 
-        if self.return_local_tokens:
-            return ref_local, ref_global, mod_local, mod_global, tar_local, tar_global
+        query_id = self.query_ids[idx]
+        target_id = self.target_ids[idx]
 
-        return ref_global, mod_global, tar_global
+        if self.return_local_tokens:
+            return ref_local, ref_global, mod_local, mod_global, tar_local, tar_global, query_id, target_id
+
+        return ref_global, mod_global, tar_global, query_id, target_id
 
 class GeometricBalancedSampler(BatchSampler):
     def __init__(self, triplets_df, batch_size, seed=42):
