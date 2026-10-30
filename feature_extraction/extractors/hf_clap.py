@@ -3,7 +3,7 @@ import numpy as np
 import librosa as rosa
 from transformers import ClapModel, ClapProcessor
 
-class CLAP:
+class HF_CLAP:
     def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {self.device} for clap")
@@ -20,11 +20,10 @@ class CLAP:
         outputs = self.model(**inputs)
 
         #local tokens, of shape [L,D], where L is the number of tokens and D is the dimension of the embeddings
-        audio_tokens = outputs.audio_model_output.last_hidden_state  # [1, 1024, 2, 32]
-        audio_tokens = audio_tokens.squeeze(0)  # [1024, 2, 32]
-        audio_tokens = audio_tokens.permute(1, 2, 0)  # [2, 32, 1024]
-        emb_size = audio_tokens.shape[-1]  # 1024
-        local_audio_tokens = audio_tokens.reshape(-1, emb_size)  # [64, 1024]
+        audio_tokens = outputs.audio_model_output.last_hidden_state   # [1, C, freq_bins, time]
+        audio_tokens = audio_tokens.squeeze(0)                        # [C, freq_bins, time]
+        audio_tokens = audio_tokens.permute(2, 1, 0)                  # [time, freq_bins, C]
+        local_audio_tokens = audio_tokens.mean(dim=1)                 # [time, C]
 
         #global tokens, of shape [1, D], where D is the dimension of the embeddings
         global_audio_tokens = outputs.audio_embeds #[1, 512]

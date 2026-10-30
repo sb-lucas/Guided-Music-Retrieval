@@ -10,29 +10,27 @@ import torch.nn.functional as F
 
 import pickle
 
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../feature_extraction')))
-from extractors.clap import CLAP
+from utils.backbones import load_extractor
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 AUDIOS_FOLDER = os.getenv("AUDIOS_FOLDER")
-EMBEDDINGS_GLOBAL_FOLDER = os.getenv("EMBEDDINGS_GLOBAL_FOLDER")
-EMBEDDINGS_LOCAL_FOLDER = os.getenv("EMBEDDINGS_LOCAL_FOLDER")
+EMBEDDINGS_FOLDER = os.getenv("EMBEDDINGS_FOLDER")
 TRIPLETS_FOLDER = os.getenv("TRIPLETS_FOLDER")
 
 #threads used to read the audio embeddings. There is one small file per track, so the time is spent waiting for the disk
 NUM_THREADS = 32
 
-def load_audio_embeddings(song, return_local_tokens):
+def load_audio_embeddings(song, return_local_tokens, backbone):
     '''
-    Reads and normalizes the embeddings of one track.
+    Reads and normalizes the embeddings of one track, from {EMBEDDINGS_FOLDER}/{backbone}/{global or local}/{song_id}.npy
+    (the song id starts with the folder of the audio dataset, like original/00/1076600).
     Returns (song_id, (global_, local_)), where local_ is None when return_local_tokens is False.
     '''
     song_id = song.split('.')[0]
-    global_path = os.path.join(EMBEDDINGS_GLOBAL_FOLDER, f"{song_id}.npy")
+    global_path = os.path.join(EMBEDDINGS_FOLDER, backbone, 'global', f"{song_id}.npy")
 
     global_ = torch.from_numpy(np.load(global_path)).float().squeeze()
     # normalize once
@@ -40,18 +38,19 @@ def load_audio_embeddings(song, return_local_tokens):
 
     local_ = None
     if return_local_tokens:
-        local_path = os.path.join(EMBEDDINGS_LOCAL_FOLDER, f"{song_id}.npy")
+        local_path = os.path.join(EMBEDDINGS_FOLDER, backbone, 'local', f"{song_id}.npy")
         local_ = torch.from_numpy(np.load(local_path)).float().squeeze()
         local_ = F.normalize(local_, dim=-1)
 
     return song_id, (global_, local_)
 
-def cache_items(items_list, dataset, split, return_local_tokens, cache_type, purpose):
+def cache_items(items_list, dataset, split, return_local_tokens, cache_type, purpose, backbone):
     '''
     items_list: list of items to cache (either text or audio)
     dataset: str, either 'mtsq' or 'mtiq'
     return_local_tokens: bool, whether to return local tokens from the dataset
     cache_type: str, either 'audio' or 'text'
+    backbone: str, key of BACKBONE_DIMS. Its embeddings are read (audio) or computed (text), and its caches have their own folder
     '''
 
     return_local_str = "local" if return_local_tokens else "no_local"
@@ -61,14 +60,14 @@ def cache_items(items_list, dataset, split, return_local_tokens, cache_type, pur
 
     #unique_texts = triplets_df['modification_text'].unique()
 
-    file_name = f"cache/{cache_type}_{purpose}_cache_{dataset}_{split}_{return_local_str}.pt"
+    file_name = f"cache/{backbone}/{cache_type}_{purpose}_cache_{dataset}_{split}_{return_local_str}.pt"
 
     if os.path.exists(file_name):
         print(f"Loading pre-computed {file_name} cache...")
         cache_dict = torch.load(file_name, map_location="cpu")
     else:
         if cache_type == "text":
-            clap_model = CLAP()
+            clap_model = load_extractor(backbone)
             if return_local_tokens:
                 for i, text in enumerate(items_list):
                     print(f"Pre-loading text embeddings: {i+1}/{len(items_list)}", end='\r')
@@ -96,7 +95,7 @@ def cache_items(items_list, dataset, split, return_local_tokens, cache_type, pur
 
         elif cache_type == "audio":
             #the tracks are read by several threads at once. executor.map returns the results in the order of items_list
-            load = functools.partial(load_audio_embeddings, return_local_tokens=return_local_tokens)
+            load = functools.partial(load_audio_embeddings, return_local_tokens=return_local_tokens, backbone=backbone)
             with ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
                 for i, (song_id, embeddings) in enumerate(executor.map(load, items_list)):
                     if i % 1000 == 0 or i + 1 == len(items_list):
@@ -105,7 +104,7 @@ def cache_items(items_list, dataset, split, return_local_tokens, cache_type, pur
                     cache_dict[song_id] = embeddings
 
         #save cache
-        os.makedirs("cache", exist_ok=True)
+        os.makedirs(os.path.dirname(file_name), exist_ok=True)
         torch.save(cache_dict, file_name)
 
     torch.cuda.empty_cache()

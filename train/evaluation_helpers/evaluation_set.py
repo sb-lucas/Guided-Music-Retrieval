@@ -12,10 +12,11 @@ load_dotenv()
 TRIPLETS_FOLDER = os.getenv("TRIPLETS_FOLDER")
 
 class EvaluationSet():
-    def __init__(self, dataset_name, split, return_local_tokens):
+    def __init__(self, dataset_name, split, return_local_tokens, backbone):
         self.dataset_name = dataset_name.upper()     #name of the dataset folder, 'MTSQ' or 'MTIQ'
         self.split = split
         self.return_local_tokens = return_local_tokens
+        self.backbone = backbone                     #key of BACKBONE_DIMS, the embeddings it extracted are the ones loaded
 
         if self.dataset_name not in ("MTSQ", "MTIQ"):
             raise ValueError(f"Unknown dataset: {dataset_name}")
@@ -44,12 +45,12 @@ class EvaluationSet():
         dataset = self.dataset_name.lower()
 
         #pre loading all audio embeddings
-        self.audio_cache = cache_items(self.all_songs, dataset, self.split, self.return_local_tokens, cache_type='audio', purpose='evaluation')
+        self.audio_cache = cache_items(self.all_songs, dataset, self.split, self.return_local_tokens, cache_type='audio', purpose='evaluation', backbone=self.backbone)
         self.check_cache(self.audio_cache, self.song_ids, 'audio')
 
         #pre loading all text embeddings
         modification_texts = self.triplets_df['modification_text'].unique()
-        self.text_cache = cache_items(modification_texts, dataset, self.split, self.return_local_tokens, cache_type='text', purpose='evaluation')
+        self.text_cache = cache_items(modification_texts, dataset, self.split, self.return_local_tokens, cache_type='text', purpose='evaluation', backbone=self.backbone)
         self.check_cache(self.text_cache, modification_texts, 'text')
 
     def __len__(self):

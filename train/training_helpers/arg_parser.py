@@ -5,11 +5,13 @@ import shutil
 import pickle
 import argparse
 
+from utils.backbones import BACKBONE_DIMS
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Experiment Configuration")
     parser.add_argument('--dataset', type=str, default='mtsq', help='Dataset Name')
 
-    parser.add_argument('--backbone', type=str, default='CLAP', help='Backbone that extracted the embeddings (its sizes are in utils/backbones.py)')
+    parser.add_argument('--backbone', type=str, default='laion_clap', choices=list(BACKBONE_DIMS), help='Backbone that extracted the embeddings (its sizes are in utils/backbones.py)')
 
     parser.add_argument('--model', type=str, default='concatenation', help='Fusion Module Architecture Name')
     

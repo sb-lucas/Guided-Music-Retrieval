@@ -81,7 +81,7 @@ def main():
     lr_str = f"lr{args.lr}"
 
     timestamp = datetime.now().strftime("%m%d_%H%M%S")
-    experiment_name = f"{args.dataset}_{args.model}_{args.seed}_{tau_str}_{lr_str}_{balance_str}_{timestamp}"
+    experiment_name = f"{args.dataset}_{args.backbone}_{args.model}_{args.seed}_{tau_str}_{lr_str}_{balance_str}_{timestamp}"
     
     if args.pretrained == '':
         save_dir = os.path.join(RUNS_FOLDER, experiment_name)
@@ -120,8 +120,8 @@ def main():
     )
     
     #Instantiate datasets
-    train_dataset = TripletDataset(train_path, method.needs_local_tokens, split = 'train', dataset = args.dataset)
-    val_dataset = TripletDataset(val_path, method.needs_local_tokens, split = 'val', dataset = args.dataset)
+    train_dataset = TripletDataset(train_path, method.needs_local_tokens, args.backbone, split = 'train', dataset = args.dataset)
+    val_dataset = TripletDataset(val_path, method.needs_local_tokens, args.backbone, split = 'val', dataset = args.dataset)
 
     #use or don't use the balanced sampler for training
     if args.balance:

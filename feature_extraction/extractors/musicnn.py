@@ -1,18 +1,27 @@
 import os
 import librosa
 import torch
-from essentia.standard import TensorflowPredictMusiCNN
+from essentia.standard import TensorflowPredictMusiCNN, MonoLoader
 from essentia import Pool as EssentiaPool
 import gc
 from dotenv import load_dotenv
 
 load_dotenv()
 
-WEIGHTS_PATH = os.getenv("WEIGHTS_PATH")
+WEIGHTS_FOLDER = os.getenv("WEIGHTS_FOLDER")
 
 class MusiCNN():
+    has_local_tokens = False        # MusiCNN has only a global embedding
+
     def __init__(self, ):
-        self.model = TensorflowPredictMusiCNN(graphFilename=os.path.join(WEIGHTS_PATH, "msd-musicnn-1.pb"), output="model/dense/BiasAdd")
+        self.model = TensorflowPredictMusiCNN(graphFilename=os.path.join(WEIGHTS_FOLDER, "msd-musicnn-1.pb"), output="model/dense/BiasAdd")
+
+    def get_audio_tokens(self, audio_path):
+        audio = MonoLoader(filename=audio_path, sampleRate=16000, resampleQuality=4)()
+        embeddings = torch.tensor(self.model(audio)).mean(dim=0, keepdim=True)
+
+        #global tokens, of shape [1, D], and no local tokens
+        return embeddings, None
 
     def get_audio_embeddings(self, audio, sr):
         # resample to 16kHz if needed

@@ -24,9 +24,6 @@ load_dotenv()
 RUNS_FOLDER = os.getenv("RUNS_FOLDER")
 RESULTS_FOLDER = os.getenv("RESULTS_FOLDER", "results")     #not in the .env yet, so the results go to ./results
 
-#backbone of the zero-shot methods (the trained runs use the one in their settings.json)
-ZERO_SHOT_BACKBONE = 'CLAP'
-
 #values of k of the metrics
 KS = [1, 2, 5, 10, 20, 50, 100]
 
@@ -54,7 +51,7 @@ INFO_COLUMNS = ['model', 'run', 'method', 'dataset', 'split', 'trained_on', 'bac
 
 def build_zero_shot(name, args, device):
     method_name, kwargs = zero_shot[name]
-    dims = BACKBONE_DIMS[ZERO_SHOT_BACKBONE]
+    dims = BACKBONE_DIMS[args.backbone]
 
     if method_name == 'llm':
         #TODO: the path of the classifications file and the Hugging Face cache folder have no source since the arguments were removed
@@ -65,7 +62,7 @@ def build_zero_shot(name, args, device):
     method.to(device)
 
     info = dict.fromkeys(INFO_COLUMNS)
-    info.update(model=name, run=name, method=method_name, backbone=ZERO_SHOT_BACKBONE)
+    info.update(model=name, run=name, method=method_name, backbone=args.backbone)
 
     return info, method
 
@@ -149,12 +146,12 @@ def main():
 
     relevance_fns = {name: CRITERIA[name] for name in args.relevance}
 
-    #one evaluation set for each kind of input: global embeddings only, or global and local tokens
+    #one evaluation set for each backbone and kind of input: global embeddings only, or global and local tokens
     eval_sets = {}
-    def get_eval_set(return_local_tokens):
-        if return_local_tokens not in eval_sets:
-            eval_sets[return_local_tokens] = EvaluationSet(args.dataset, args.split, return_local_tokens)
-        return eval_sets[return_local_tokens]
+    def get_eval_set(backbone, return_local_tokens):
+        if (backbone, return_local_tokens) not in eval_sets:
+            eval_sets[(backbone, return_local_tokens)] = EvaluationSet(args.dataset, args.split, return_local_tokens, backbone)
+        return eval_sets[(backbone, return_local_tokens)]
 
     #the methods are built one at a time, so only one is in memory
     def iterate_methods():
@@ -166,7 +163,7 @@ def main():
     for info, method in iterate_methods():
         print(f"\nEvaluating {info['model']} ({info['run']})")
 
-        eval_set = get_eval_set(method.needs_local_tokens)
+        eval_set = get_eval_set(info['backbone'], method.needs_local_tokens)
         info.update(dataset=args.dataset.lower(), split=args.split, n_queries=len(eval_set))
 
         results = evaluate_run(method, eval_set, relevance_fns)

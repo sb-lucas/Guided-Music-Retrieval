@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//exp/ldsbrandao/train/utils/**)",
+      "Read(//exp/ldsbrandao/**)"
+    ]
+  }
+}

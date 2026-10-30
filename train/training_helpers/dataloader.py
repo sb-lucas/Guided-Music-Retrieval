@@ -14,21 +14,15 @@ import pickle
 
 from utils.caching import cache_items
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../feature_extraction')))
-from extractors.clap import CLAP
-
 from dotenv import load_dotenv
 
 load_dotenv()
 
 AUDIOS_FOLDER = os.getenv("AUDIOS_FOLDER")
-EMBEDDINGS_GLOBAL_FOLDER = os.getenv("EMBEDDINGS_GLOBAL_FOLDER")
-EMBEDDINGS_LOCAL_FOLDER = os.getenv("EMBEDDINGS_LOCAL_FOLDER")
 
 class TripletDataset(Dataset):
-    def __init__(self, triplets_path, return_local_tokens, split='train', dataset='controlled'):
-        self.local_audio_tokens_folder = EMBEDDINGS_LOCAL_FOLDER
-        self.global_audio_tokens_folder = EMBEDDINGS_GLOBAL_FOLDER
+    def __init__(self, triplets_path, return_local_tokens, backbone, split='train', dataset='controlled'):
+        self.backbone = backbone
         self.audios_folder = AUDIOS_FOLDER
         self.triplets_df = pd.read_csv(triplets_path)
 
@@ -40,10 +34,10 @@ class TripletDataset(Dataset):
 
         #pre loading all audio embeddings
         self.all_songs = pd.concat([self.triplets_df["reference_song"], self.triplets_df["target_song"]]).unique()
-        self.audio_cache = cache_items(self.all_songs, dataset, split, self.return_local_tokens, cache_type='audio', purpose='training')
+        self.audio_cache = cache_items(self.all_songs, dataset, split, self.return_local_tokens, cache_type='audio', purpose='training', backbone=self.backbone)
 
         #pre loading all text embeddings
-        self.text_cache = cache_items(self.triplets_df['modification_text'].unique(), dataset, split, self.return_local_tokens, cache_type='text', purpose='training')
+        self.text_cache = cache_items(self.triplets_df['modification_text'].unique(), dataset, split, self.return_local_tokens, cache_type='text', purpose='training', backbone=self.backbone)
 
         #create query and target ids for the loss
         query_key = self.triplets_df['reference_song'] + '||' + self.triplets_df['modification']
